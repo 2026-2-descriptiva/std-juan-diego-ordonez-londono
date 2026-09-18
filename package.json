@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "nicegui": "^0.1.4"
+  }
+}
