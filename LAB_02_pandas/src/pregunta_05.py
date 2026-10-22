@@ -1,3 +1,6 @@
+from pathlib import Path
+import pandas as pd
+
 def pregunta_05():
     """
     Usando `data/tbl0.tsv`, encuentre el valor máximo de la columna `c2` para
@@ -13,4 +16,10 @@ def pregunta_05():
         ...
     """
 
-    raise NotImplementedError
+    file_path = Path("data/tbl0.tsv")
+    if not file_path.exists():
+        file_path = Path(__file__).resolve().parent.parent / "data" / "tbl0.tsv"
+
+    df = pd.read_csv(file_path, sep="\t")
+    maximos = df.groupby("c1")["c2"].max().sort_index()
+    return maximos

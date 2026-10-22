@@ -1,3 +1,6 @@
+from pathlib import Path
+import pandas as pd
+
 def pregunta_02():
     """
     ¿Cuántas columnas tiene la tabla `data/tbl0.tsv`? Retorne la cantidad
@@ -8,4 +11,9 @@ def pregunta_02():
         4
     """
 
-    raise NotImplementedError
+    file_path = Path("data/tbl0.tsv")
+    if not file_path.exists():
+        file_path = Path(__file__).resolve().parent.parent / "data" / "tbl0.tsv"
+
+    df = pd.read_csv(file_path, sep="\t")
+    return len(df.columns)

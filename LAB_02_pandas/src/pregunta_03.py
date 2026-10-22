@@ -1,3 +1,6 @@
+from pathlib import Path
+import pandas as pd
+
 def pregunta_03():
     """
     Usando `data/tbl0.tsv`, cuente cuántos registros hay para cada categoría
@@ -13,4 +16,9 @@ def pregunta_03():
         ...
     """
 
-    raise NotImplementedError
+    file_path = Path("data/tbl0.tsv")
+    if not file_path.exists():
+        file_path = Path(__file__).resolve().parent.parent / "data" / "tbl0.tsv"
+
+    df = pd.read_csv(file_path, sep="\t")
+    return df["c1"].value_counts().sort_index()
