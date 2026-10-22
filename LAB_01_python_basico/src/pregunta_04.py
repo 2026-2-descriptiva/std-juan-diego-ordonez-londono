@@ -1,3 +1,7 @@
+
+import gzip
+from pathlib import Path
+
 def pregunta_04():
     """
     Cuente cuántos registros hay en cada mes, usando la fecha de la tercera
@@ -9,4 +13,18 @@ def pregunta_04():
         [("01", 3), ("02", 4), ("03", 2), ...]
     """
 
-    raise NotImplementedError
+    file_path = Path(__file__).resolve().parent.parent / "data" / "data.csv.gz"
+
+    conteo = {}
+
+    with gzip.open(file_path, "rt", encoding="utf-8") as archivo:
+        for linea in archivo:
+            linea = linea.strip()
+            if not linea:
+                continue
+            mes = linea.split("\t")[2].split("-")[1]
+            if mes not in conteo:
+                conteo[mes] = 0
+            conteo[mes] += 1
+
+    return sorted(conteo.items())
