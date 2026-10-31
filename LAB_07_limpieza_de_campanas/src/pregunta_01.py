@@ -1,5 +1,7 @@
-import pandas as pd
+from importlib.metadata import files
 
+import pandas as pd
+from pathlib import Path
 
 def clean_campaign_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
@@ -43,4 +45,62 @@ def clean_campaign_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         ...
     """
 
-    raise NotImplementedError
+    data_dir = Path("data")
+    if not (data_dir / "bank-marketing-campaing-0.csv.gz").exists():
+        data_dir = Path(__file__).resolve().parent.parent / "data"
+        submission_dir = Path(__file__).resolve().parent.parent / "submission"
+    else:
+        submission_dir = Path("submission")
+
+    submission_dir.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(data_dir.glob("bank-marketing-campaing-*.csv.gz"))
+    parts = []
+    for f in files:
+        parts.append(pd.read_csv(f, compression="gzip"))
+    df = pd.concat(parts, ignore_index=True)
+
+    # 1. client
+    client = pd.DataFrame({
+        "client_id": df["client_id"].astype(int),
+        "age": df["age"].astype(int),
+        "job": df["job"].str.replace(".", "", regex=False).str.replace("-", "_", regex=False),
+        "marital": df["marital"],
+        "education": df["education"].str.replace(".", "_", regex=False).replace("unknown", pd.NA),
+        "credit_default": (df["credit_default"] == "yes").astype(int),
+        "mortgage": (df["mortgage"] == "yes").astype(int),
+    })
+
+    # 2. campaign
+    months = {
+        "jan": "01", "feb": "02", "mar": "03", "apr": "04",
+        "may": "05", "jun": "06", "jul": "07", "aug": "08",
+        "sep": "09", "oct": "10", "nov": "11", "dec": "12",
+    }
+    month_num = df["month"].str.lower().map(months)
+    day_num = df["day"].astype(str).str.zfill(2)
+    date = pd.to_datetime({"year": 2022, "month": month_num, "day": day_num})
+    last_contact_date = date.dt.strftime("%Y-%m-%d")
+
+    campaign = pd.DataFrame({
+        "client_id": df["client_id"].astype(int),
+        "number_contacts": df["number_contacts"].astype(int),
+        "contact_duration": df["contact_duration"].astype(int),
+        "previous_campaign_contacts": df["previous_campaign_contacts"].astype(int),
+        "previous_outcome": (df["previous_outcome"] == "success").astype(int),
+        "campaign_outcome": (df["campaign_outcome"] == "yes").astype(int),
+        "last_contact_date": last_contact_date,
+    })
+
+    # 3. economics
+    economics = pd.DataFrame({
+        "client_id": df["client_id"].astype(int),
+        "cons_price_idx": df["cons_price_idx"].astype(float),
+        "euribor_three_months": df["euribor_three_months"].astype(float),
+    })
+
+    client.to_csv(submission_dir / "client.csv", index=False)
+    campaign.to_csv(submission_dir / "campaign.csv", index=False)
+    economics.to_csv(submission_dir / "economics.csv", index=False)
+
+    return client, campaign, economics

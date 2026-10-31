@@ -1,3 +1,7 @@
+import pandas as pd
+from pathlib import Path
+import json
+
 def pregunta_01():
     """
     Una aseguradora quiere publicar datos de sus afiliados para que un grupo
@@ -80,4 +84,121 @@ def pregunta_01():
         }
     """
 
-    raise NotImplementedError
+    file_path = Path("data/insurance.csv.gz")
+    if not file_path.exists():
+        file_path = Path(__file__).resolve().parent.parent / "data" / "insurance.csv.gz"
+        submission_dir = Path(__file__).resolve().parent.parent / "submission"
+    else:
+        submission_dir = Path("submission")
+
+    submission_dir.mkdir(parents=True, exist_ok=True)
+
+    df = pd.read_csv(file_path)
+
+    #Columnas auxiliares
+
+    def age_group(age):
+        if age < 30:
+            return "18-29"
+        if age < 40:
+            return "30-39"
+        if age < 50:
+            return "40-49"
+        return "50-64"
+
+    def bmi_group(bmi):
+        if bmi < 18.5:
+            return "bajo peso"
+        if bmi < 25:
+            return "normal"
+        if bmi < 30:
+            return "sobrepeso"
+        return "obesidad"
+
+    def kids_group(kids):
+        if kids == 0:
+            return "0"
+        if kids <= 2:
+            return "1-2"
+        return "3+"
+
+    df["age_group"] = df["age"].apply(age_group)
+    df["bmi_group"] = df["bmi"].apply(bmi_group)
+    df["children_group"] = df["children"].apply(kids_group)
+    df["es_fumador"] = (df["smoker"] == "yes").astype(int)
+
+    k = 5
+
+    #Riesgo con los cuasi-identificadores originales 
+
+    og_qis = ["age", "sex", "bmi", "children", "region"]
+    og_sizes = df.groupby(og_qis)["age"].transform("size")
+    og_K = int(og_sizes.min())
+    original_unique_records = int((og_sizes == 1).sum())
+
+    #Esquemas de generalización
+
+    schemes = {
+        "with_children": ["age_group", "sex", "bmi_group", "children_group", "region"],
+        "without_children": ["age_group", "sex", "bmi_group", "region"],
+    }
+
+    schemes_results = {}
+    published_dfs = {}
+
+    for name, qis in schemes.items():
+        og_sizes = df.groupby(qis)["age"].transform("size")
+        published = og_sizes >= k
+        df_pub = df[published]
+
+        clases = df.groupby(qis).size()
+        clases_pub = df_pub.groupby(qis)["es_fumador"].agg(["size", "sum"])
+
+        smokes = clases_pub["sum"] == clases_pub["size"]
+        not_smoke = clases_pub["sum"] == 0
+        no_div_records = clases_pub[smokes | not_smoke]
+
+        schemes_results[name] = {
+            "quasi_identifiers": qis,
+            "equivalence_classes": int(len(clases)),
+            "k_before_suppression": int(clases.min()),
+            "suppressed_records": int((~published).sum()),
+            "published_records": int(published.sum()),
+            "published_classes": int(len(clases_pub)),
+            "classes_without_smoker_diversity": int(len(no_div_records)),
+            "records_without_smoker_diversity": int(no_div_records["size"].sum()),
+        }
+        published_dfs[name] = published
+
+    # Esquema seleccionado: el que suprime menos registros
+    selected_scheme = "with_children"
+    if (
+        schemes_results["without_children"]["suppressed_records"]
+        < schemes_results["with_children"]["suppressed_records"]
+    ):
+        selected_scheme = "without_children"
+
+    df_published = df[published_dfs[selected_scheme]]
+
+    report = {
+        "original_k": og_K,
+        "original_unique_records": original_unique_records,
+        "schemes": schemes_results,
+        "selected_scheme": selected_scheme,
+        "mean_charges_original": float(df["charges"].mean()),
+        "mean_charges_published": float(df_published["charges"].mean()),
+        "smoker_rate_original": float(df["es_fumador"].mean()),
+        "smoker_rate_published": float(df_published["es_fumador"].mean()),
+    }
+
+    Path("submission").mkdir(parents=True, exist_ok=True)
+
+    with open("submission/privacy_report.json", "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=4)
+
+    output_columns = schemes[selected_scheme] + ["smoker", "charges"]
+    df_published[output_columns].to_csv(
+        "submission/insurance_published.csv", index=False
+    )
+
+    return report
